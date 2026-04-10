@@ -26,9 +26,9 @@ class FileInfo():
 
 class FileRegistery():
     """
-    文件注册表
+        文件注册表
 
-    主要实现文件的注册和删除
+        主要实现文件的注册和删除
     """
 
     def __init__(self, auto_cleanup_expire_interval: int = 300, search_path: str = '.') -> None:
