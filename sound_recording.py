@@ -3,7 +3,9 @@ import wave
 import threading
 import keyboard
 import time
+import tempfile
 from dataclasses import dataclass
+from file_registery import FileRegistery
 
 @dataclass
 class RecorderSettings():
@@ -24,7 +26,7 @@ class RecorderSettings():
     format: int = pyaudio.paInt16
     channels: int = 1
     rate: int = 44100
-    auto_save_on_device_loss: bool = False
+    auto_save_on_device_loss: bool = True
 
 class Recorder():
     """
@@ -36,7 +38,7 @@ class Recorder():
             recorder_settings(RecorderSettings): 音频录制设置
     """
 
-    def __init__(self, recorder_settings: RecorderSettings) -> None:
+    def __init__(self, recorder_settings: RecorderSettings, file_registery: FileRegistery) -> None:
         self.settings = recorder_settings
         self.CHUNK = self.settings.chunk
         self.FORMAT = self.settings.format
@@ -51,13 +53,17 @@ class Recorder():
         self.pause_event = threading.Event()    # 创建暂停事件
         self.pause_event.set()                  # 初始状态为运行
 
+        self.file_registery = file_registery
+
     def pause_recording(self) -> None:
         """暂停录音"""
         self.pause_event.clear()
+        print('已暂停录音')
 
     def resume_recording(self) -> None:
         """恢复录音"""
         self.pause_event.set()
+        print('已恢复录音')
 
     def get_recording(self) -> None:
         """
@@ -79,6 +85,8 @@ class Recorder():
                 self.device_ready = False
                 self.wait_for_device()
                 continue
+
+            print('可以开始录音了')
 
             # 循环接收数据，每次从流中选出一个块的大小的数据存入frames中，在此过程中，可能会因为设备缺失而抛出异常
             try:
@@ -106,18 +114,31 @@ class Recorder():
         """
             保存录音数据
 
-            将self.frames中的数据写入到recording.wav文件中
+            将self.frames中的数据写入到临时文件中
 
             无参数，无返回值
         """
 
         if self.frames:
-            wf = wave.open("recording.wav", 'wb')
+            print('正在保存')
+
+            # 使用临时文件缓存录音
+            temp_file = tempfile.NamedTemporaryFile(
+                suffix='.wav',
+                prefix='recording_',
+                dir='.',                # 保存在当前目录下
+                delete=False            # close时不自动删除文件
+            )
+
+            wf = wave.open(temp_file.name, 'wb')
             wf.setnchannels(self.CHANNELS)
             wf.setsampwidth(self.p.get_sample_size(self.FORMAT))
             wf.setframerate(self.RATE)
             wf.writeframes(b''.join(self.frames))
             wf.close()
+
+            temp_file.close()
+
             self.frames = []        # 清空数据，防止下次录音时重复写入
 
     def wait_for_device(self) -> None:
@@ -164,9 +185,9 @@ if __name__ == '__main__':
     recorder = Recorder(recorder_settings)
 
     # 添加快捷键
-    keyboard.add_hotkey('ctrl+a+b', recorder.stop_recording)       # 停止录音
-    keyboard.add_hotkey('a+b+c', recorder.pause_recording)         # 暂停录音
-    keyboard.add_hotkey('b+c+d', recorder.resume_recording)        # 继续录音
+    keyboard.add_hotkey('ctrl+a+b', recorder.stop_recording)             # 停止录音
+    keyboard.add_hotkey('shift+a+b+c', recorder.pause_recording)         # 暂停录音
+    keyboard.add_hotkey('shift+b+c+d', recorder.resume_recording)        # 继续录音
 
     # 创建进程，防止阻塞
     thread_record = threading.Thread(target=recorder.get_recording)
@@ -179,5 +200,5 @@ if __name__ == '__main__':
 
     # 消除快捷键
     keyboard.remove_hotkey('ctrl+a+b')
-    keyboard.remove_hotkey('a+b+c')
-    keyboard.remove_hotkey('b+c+d')
+    keyboard.remove_hotkey('shift+a+b+c')
+    keyboard.remove_hotkey('shift+b+c+d')
